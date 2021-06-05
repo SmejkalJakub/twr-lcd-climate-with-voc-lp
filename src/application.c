@@ -1,18 +1,18 @@
 #include <application.h>
 
-#define BATTERY_UPDATE_INTERVAL (2 * 1000)
+#define BATTERY_UPDATE_INTERVAL (3500)
 
 #define TMP112_PUB_NO_CHANGE_INTERVAL (1000)
 #define TMP112_PUB_VALUE_CHANGE 0.2f
-#define TMP112_UPDATE_INTERVAL (1000)
+#define TMP112_UPDATE_INTERVAL (3500)
 
-#define VOC_LP_TAG_UPDATE_INTERVAL (1000)
+#define VOC_LP_TAG_UPDATE_INTERVAL (3500)
 #define VOC_LP_TAG_PUB_VALUE_CHANGE 5.0f
-#define VOC_LP_TAG_PUB_NO_CHANGE_INTERVAL (1000)
+#define VOC_LP_TAG_PUB_NO_CHANGE_INTERVAL (10000)
 
 #define HUMIDITY_TAG_PUB_NO_CHANGE_INTERVAL (1000)
 #define HUMIDITY_TAG_PUB_VALUE_CHANGE 5.0f
-#define HUMIDITY_TAG_UPDATE_INTERVAL (1000)
+#define HUMIDITY_TAG_UPDATE_INTERVAL (3500)
 
 #define MAX_PAGE_INDEX 2
 
@@ -250,8 +250,8 @@ void voc_lp_tag_event_handler(twr_tag_voc_lp_t *self, twr_tag_voc_lp_event_t eve
 
         if (twr_tag_voc_lp_get_tvoc_ppb(self, &value))
         {
-            if (((fabsf(value - param->value) >= VOC_LP_TAG_PUB_VALUE_CHANGE) || (param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-            {
+            /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
+            {*/
                 param->value = value;
                 param->next_pub = twr_scheduler_get_spin_tick() + VOC_LP_TAG_PUB_NO_CHANGE_INTERVAL;
 
@@ -259,10 +259,10 @@ void voc_lp_tag_event_handler(twr_tag_voc_lp_t *self, twr_tag_voc_lp_event_t eve
 
                 values.tvoc = radio_tvoc;
 
-                twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &radio_tvoc);
+                //twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &radio_tvoc);
                 twr_scheduler_plan_now(0);
 
-            }
+            //}
         }
     }
 }
@@ -279,15 +279,15 @@ void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *ev
 
     if (twr_tmp112_get_temperature_celsius(self, &value))
     {
-        if (((fabs(value - param->value) >= TMP112_PUB_VALUE_CHANGE) || (param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-        {
-            twr_radio_pub_temperature(param->channel, &value);
+        /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
+        {*/
+            //twr_radio_pub_temperature(param->channel, &value);
             param->value = value;
             param->next_pub = twr_scheduler_get_spin_tick() + TMP112_PUB_NO_CHANGE_INTERVAL;
 
             values.temperature = value;
             twr_scheduler_plan_now(0);
-        }
+        //}
     }
 }
 
@@ -303,15 +303,15 @@ void humidity_tag_event_handler(twr_tag_humidity_t *self, twr_tag_humidity_event
 
     if (twr_tag_humidity_get_humidity_percentage(self, &value))
     {
-        if (((fabs(value - param->value) >= HUMIDITY_TAG_PUB_VALUE_CHANGE) || (param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-        {
-            twr_radio_pub_humidity(param->channel, &value);
+        /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
+        {*/
+            //twr_radio_pub_humidity(param->channel, &value);
             param->value = value;
             param->next_pub = twr_scheduler_get_spin_tick() + HUMIDITY_TAG_PUB_NO_CHANGE_INTERVAL;
 
             values.humidity = value;
             twr_scheduler_plan_now(0);
-        }
+        //}
     }
 }
 
@@ -329,7 +329,7 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
         {
 
             values.battery_voltage = voltage;
-            twr_radio_pub_battery(&voltage);
+            //twr_radio_pub_battery(&voltage);
         }
 
         if (twr_module_battery_get_charge_level(&percentage))
@@ -337,6 +337,19 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
             values.battery_pct = percentage;
         }
     }
+}
+
+void send_data_over_radio()
+{
+    if(active_mode)
+    {
+        twr_radio_pub_temperature(0, &(values.temperature));
+        twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &(values.tvoc));
+        twr_radio_pub_humidity(0, &(values.humidity));
+        twr_radio_pub_battery(&(values.battery_voltage));
+    }
+    twr_scheduler_plan_current_from_now(2000);
+
 }
 
 void application_init(void)
@@ -395,6 +408,8 @@ void application_init(void)
     twr_radio_pairing_request("air-quality-monitor", VERSION);
 
     twr_led_pulse(&led, 2000);
+
+    twr_scheduler_register(send_data_over_radio, NULL, 2000);
 }
 
 void application_task(void)
