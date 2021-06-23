@@ -1,18 +1,15 @@
 #include <application.h>
 
-#define BATTERY_UPDATE_INTERVAL (3500)
+#define BATTERY_UPDATE_INTERVAL (7 * 60 * 60 * 1000) // 7 hodin
+#define BATTERY_UPDATE_SERVICE_INTERVAL (10 * 60 * 1000) // 10 minut
 
-#define TMP112_PUB_NO_CHANGE_INTERVAL (1000)
-#define TMP112_PUB_VALUE_CHANGE 0.2f
+#define SERVICE_INTERVAL_INTERVAL (11 * 60 * 1000)
+
 #define TMP112_UPDATE_INTERVAL (3500)
-
 #define VOC_LP_TAG_UPDATE_INTERVAL (3500)
-#define VOC_LP_TAG_PUB_VALUE_CHANGE 5.0f
-#define VOC_LP_TAG_PUB_NO_CHANGE_INTERVAL (10000)
-
-#define HUMIDITY_TAG_PUB_NO_CHANGE_INTERVAL (1000)
-#define HUMIDITY_TAG_PUB_VALUE_CHANGE 5.0f
 #define HUMIDITY_TAG_UPDATE_INTERVAL (3500)
+
+#define RADIO_SEND_INTERVAL 2000
 
 #define MAX_PAGE_INDEX 2
 
@@ -253,7 +250,6 @@ void voc_lp_tag_event_handler(twr_tag_voc_lp_t *self, twr_tag_voc_lp_event_t eve
             /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
             {*/
                 param->value = value;
-                param->next_pub = twr_scheduler_get_spin_tick() + VOC_LP_TAG_PUB_NO_CHANGE_INTERVAL;
 
                 int radio_tvoc = value;
 
@@ -283,7 +279,6 @@ void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *ev
         {*/
             //twr_radio_pub_temperature(param->channel, &value);
             param->value = value;
-            param->next_pub = twr_scheduler_get_spin_tick() + TMP112_PUB_NO_CHANGE_INTERVAL;
 
             values.temperature = value;
             twr_scheduler_plan_now(0);
@@ -307,7 +302,6 @@ void humidity_tag_event_handler(twr_tag_humidity_t *self, twr_tag_humidity_event
         {*/
             //twr_radio_pub_humidity(param->channel, &value);
             param->value = value;
-            param->next_pub = twr_scheduler_get_spin_tick() + HUMIDITY_TAG_PUB_NO_CHANGE_INTERVAL;
 
             values.humidity = value;
             twr_scheduler_plan_now(0);
@@ -329,7 +323,7 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
         {
 
             values.battery_voltage = voltage;
-            //twr_radio_pub_battery(&voltage);
+            twr_radio_pub_battery(&values.battery_voltage);
         }
 
         if (twr_module_battery_get_charge_level(&percentage))
@@ -343,13 +337,18 @@ void send_data_over_radio()
 {
     if(active_mode)
     {
-        twr_radio_pub_temperature(0, &(values.temperature));
-        twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &(values.tvoc));
-        twr_radio_pub_humidity(0, &(values.humidity));
-        twr_radio_pub_battery(&(values.battery_voltage));
+        twr_radio_pub_temperature(0, &values.temperature);
+        twr_radio_pub_float("voc-lp-sensor/0:0/tvoc", &values.tvoc);
+        twr_radio_pub_humidity(0, &values.humidity);
     }
-    twr_scheduler_plan_current_from_now(2000);
+    twr_scheduler_plan_current_from_now(RADIO_SEND_INTERVAL);
 
+}
+
+void switch_to_normal_mode_task(void *param)
+{
+    twr_module_battery_set_update_interval(BATTERY_UPDATE_INTERVAL);
+    twr_scheduler_unregister(twr_scheduler_get_current_task_id());
 }
 
 void application_init(void)
@@ -403,13 +402,15 @@ void application_init(void)
     // Battery
     twr_module_battery_init();
     twr_module_battery_set_event_handler(battery_event_handler, NULL);
-    twr_module_battery_set_update_interval(BATTERY_UPDATE_INTERVAL);
+    twr_module_battery_set_update_interval(BATTERY_UPDATE_SERVICE_INTERVAL);
 
     twr_radio_pairing_request("air-quality-monitor", VERSION);
 
     twr_led_pulse(&led, 2000);
 
-    twr_scheduler_register(send_data_over_radio, NULL, 2000);
+    twr_scheduler_register(send_data_over_radio, NULL, RADIO_SEND_INTERVAL);
+    twr_scheduler_register(switch_to_normal_mode_task, NULL, SERVICE_INTERVAL_INTERVAL);
+
 }
 
 void application_task(void)
