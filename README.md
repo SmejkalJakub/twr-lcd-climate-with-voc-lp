@@ -2,7 +2,7 @@
 
 # Firmware Skeleton for HARDWARIO TOWER Core Module
 
-[![Travis](https://travis-ci.org/hardwario/twr-lcd-climate-with-voc-lp.svg?branch=main)](https://travis-ci.org/hardwario/twr-lcd-climate-with-voc-lp)
+[![build](https://github.com/hardwario/twr-lcd-climate-with-voc-lp/actions/workflows/main.yml/badge.svg)](https://github.com/hardwario/twr-lcd-climate-with-voc-lp/actions/workflows/main.yml)
 [![Release](https://img.shields.io/github/release/hardwario/twr-skeleton.svg)](https://github.com/hardwario/twr-skeleton/releases)
 [![License](https://img.shields.io/github/license/hardwario/twr-skeleton.svg)](https://github.com/hardwario/twr-skeleton/blob/master/LICENSE)
 [![Twitter](https://img.shields.io/twitter/follow/hardwario_en.svg?style=social&label=Follow)](https://twitter.com/hardwario_en)
