@@ -2,14 +2,19 @@
 
 #define BATTERY_UPDATE_INTERVAL (7 * 60 * 60 * 1000) // 7 hodin
 #define BATTERY_UPDATE_SERVICE_INTERVAL (10 * 60 * 1000) // 10 minut
+#define BATTERY_UPDATE_INITIAL_INTERVAL (60 * 1000) // 1 minuta
 
-#define SERVICE_INTERVAL_INTERVAL (11 * 60 * 1000)
+#define SERVICE_INTERVAL_INTERVAL (10 * 60 * 1000)
 
-#define TMP112_UPDATE_INTERVAL (3500)
-#define VOC_LP_TAG_UPDATE_INTERVAL (3500)
-#define HUMIDITY_TAG_UPDATE_INTERVAL (3500)
+#define TMP112_UPDATE_INTERVAL (2000)
+#define VOC_LP_TAG_UPDATE_INTERVAL (2000)
+#define HUMIDITY_TAG_UPDATE_INTERVAL (2000)
 
-#define RADIO_SEND_INTERVAL 2000
+#define TEMPERATURE_TAG_PUB_VALUE_CHANGE 0.5f
+#define HUMIDITY_TAG_PUB_VALUE_CHANGE 2
+#define VOC_TAG_PUB_VALUE_CHANGE 1000
+
+#define RADIO_SEND_INTERVAL 30 * 1000               // 30 sekund
 
 #define MAX_PAGE_INDEX 2
 
@@ -21,6 +26,8 @@ bool led_state = false;
 bool active_mode = true;
 
 twr_gfx_t *gfx;
+
+bool first_battery_send = true;
 
 static struct
 {
@@ -171,13 +178,14 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
 
         static uint16_t left_event_count = 0;
         left_event_count++;
-        //twr_radio_pub_event_count(TWR_RADIO_PUB_EVENT_LCD_BUTTON_LEFT, &left_event_count);
     }
     else if(event == TWR_MODULE_LCD_EVENT_BOTH_HOLD)
     {
         active_mode = !active_mode;
         if(active_mode)
         {
+            first_battery_send = true;
+            twr_module_battery_set_update_interval(BATTERY_UPDATE_INITIAL_INTERVAL);
             twr_scheduler_plan_now(0);
         }
         else
@@ -185,7 +193,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
             twr_gfx_clear(gfx);
             twr_gfx_update(gfx);
         }
-
     }
     else if(event == TWR_MODULE_LCD_EVENT_RIGHT_CLICK)
     {
@@ -205,13 +212,11 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
 
         static uint16_t right_event_count = 0;
         right_event_count++;
-        //twr_radio_pub_event_count(TWR_RADIO_PUB_EVENT_LCD_BUTTON_RIGHT, &right_event_count);
     }
     else if(event == TWR_MODULE_LCD_EVENT_LEFT_HOLD)
     {
         static int left_hold_event_count = 0;
         left_hold_event_count++;
-        twr_radio_pub_int("push-button/lcd:left-hold/event-count", &left_hold_event_count);
 
         twr_led_pulse(&led_lcd_green, 100);
     }
@@ -219,7 +224,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
     {
         static int right_hold_event_count = 0;
         right_hold_event_count++;
-        twr_radio_pub_int("push-button/lcd:right-hold/event-count", &right_hold_event_count);
 
         twr_led_pulse(&led_lcd_green, 100);
 
@@ -228,7 +232,6 @@ void lcd_event_handler(twr_module_lcd_event_t event, void *event_param)
     {
         static int both_hold_event_count = 0;
         both_hold_event_count++;
-        twr_radio_pub_int("push-button/lcd:both-hold/event-count", &both_hold_event_count);
 
         twr_led_pulse(&led_lcd_green, 100);
     }
@@ -247,18 +250,20 @@ void voc_lp_tag_event_handler(twr_tag_voc_lp_t *self, twr_tag_voc_lp_event_t eve
 
         if (twr_tag_voc_lp_get_tvoc_ppb(self, &value))
         {
-            /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-            {*/
-                param->value = value;
+            param->value = value;
 
+            if ((fabs(value - values.tvoc) >= VOC_TAG_PUB_VALUE_CHANGE))
+            {
                 int radio_tvoc = value;
 
-                values.tvoc = radio_tvoc;
+                twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &radio_tvoc);
+            }
 
-                //twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &radio_tvoc);
-                twr_scheduler_plan_now(0);
+            int radio_tvoc = value;
 
-            //}
+            values.tvoc = radio_tvoc;
+
+            twr_scheduler_plan_now(0);
         }
     }
 }
@@ -275,14 +280,14 @@ void tmp112_event_handler(twr_tmp112_t *self, twr_tmp112_event_t event, void *ev
 
     if (twr_tmp112_get_temperature_celsius(self, &value))
     {
-        /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-        {*/
-            //twr_radio_pub_temperature(param->channel, &value);
-            param->value = value;
+        param->value = value;
 
-            values.temperature = value;
-            twr_scheduler_plan_now(0);
-        //}
+        if ((fabs(value - values.temperature) >= TEMPERATURE_TAG_PUB_VALUE_CHANGE))
+        {
+            twr_radio_pub_temperature(0, &value);
+        }
+        values.temperature = value;
+        twr_scheduler_plan_now(0);
     }
 }
 
@@ -298,14 +303,15 @@ void humidity_tag_event_handler(twr_tag_humidity_t *self, twr_tag_humidity_event
 
     if (twr_tag_humidity_get_humidity_percentage(self, &value))
     {
-        /*if (((param->next_pub < twr_scheduler_get_spin_tick())) && active_mode)
-        {*/
-            //twr_radio_pub_humidity(param->channel, &value);
-            param->value = value;
+        param->value = value;
 
-            values.humidity = value;
-            twr_scheduler_plan_now(0);
-        //}
+        if ((fabs(value - values.humidity) >= HUMIDITY_TAG_PUB_VALUE_CHANGE))
+        {
+            twr_radio_pub_humidity(0, &value);
+        }
+
+        values.humidity = value;
+        twr_scheduler_plan_now(0);
     }
 }
 
@@ -321,7 +327,11 @@ void battery_event_handler(twr_module_battery_event_t event, void *event_param)
     {
         if (twr_module_battery_get_voltage(&voltage) && active_mode)
         {
-
+            if(first_battery_send)
+            {
+                twr_module_battery_set_update_interval(BATTERY_UPDATE_SERVICE_INTERVAL);
+                twr_scheduler_register(switch_to_normal_mode_task, NULL, SERVICE_INTERVAL_INTERVAL);
+            }
             values.battery_voltage = voltage;
             twr_radio_pub_battery(&values.battery_voltage);
         }
@@ -338,11 +348,13 @@ void send_data_over_radio()
     if(active_mode)
     {
         twr_radio_pub_temperature(0, &values.temperature);
-        twr_radio_pub_float("voc-lp-sensor/0:0/tvoc", &values.tvoc);
+
+        int radio_tvoc = values.tvoc;
+        twr_radio_pub_int("voc-lp-sensor/0:0/tvoc", &radio_tvoc);
+
         twr_radio_pub_humidity(0, &values.humidity);
     }
     twr_scheduler_plan_current_from_now(RADIO_SEND_INTERVAL);
-
 }
 
 void switch_to_normal_mode_task(void *param)
