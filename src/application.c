@@ -414,7 +414,7 @@ void application_init(void)
     // Battery
     twr_module_battery_init();
     twr_module_battery_set_event_handler(battery_event_handler, NULL);
-    twr_module_battery_set_update_interval(BATTERY_UPDATE_SERVICE_INTERVAL);
+    twr_module_battery_set_update_interval(BATTERY_UPDATE_INITIAL_INTERVAL);
 
     twr_radio_pairing_request("air-quality-monitor", VERSION);
 
